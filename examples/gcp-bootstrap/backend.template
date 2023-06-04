@@ -1,0 +1,6 @@
+terraform {
+  backend "gcs" {
+    bucket = "REMOTE_STATE_BUCKET"
+    prefix = "terraform/bootstrap-state"
+  }
+}

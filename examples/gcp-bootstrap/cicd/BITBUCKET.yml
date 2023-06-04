@@ -1,0 +1,99 @@
+image: google/cloud-sdk:411.0.0
+definitions:
+  yaml-anchors:
+    - &set-env-vars >-
+      export TF_VERSION="1.3.5" && 
+      export GCLOUD_VERSION="411.0.0" && 
+
+      export BRANCH_NAME="${BITBUCKET_BRANCH}" && 
+      export OIDC_TOKEN="${BITBUCKET_STEP_OIDC_TOKEN}" && 
+
+      export BRANCH_NAME_APPLY="master" && 
+
+      export BASE_DIR="${BITBUCKET_CLONE_DIR}" && 
+      export POLICY_LIBRARY_FOLDER="${BASE_DIR}/policy-library" && 
+
+      export BOOTSTRAP_PROJECT_ID="BOOTSTRAP_PROJECT_ID_REPLACE" && 
+      export WORKLOAD_IDENTITY_PROVIDER_ID="WORKLOAD_IDENTITY_PROVIDER_ID_REPLACE" && 
+
+      export TF_BOOTSTRAP_WORKING_DIR="${BASE_DIR}/examples/gcp-bootstrap" && 
+      export TF_BOOTSTRAP_SERVICE_ACCOUNT="TF_BOOTSTRAP_SERVICE_ACCOUNT_REPLACE" && 
+
+      export TF_ORG_WORKING_DIR="${BASE_DIR}/1-org/envs" && 
+      export TF_ORG_SERVICE_ACCOUNT="TF_ORG_SERVICE_ACCOUNT_REPLACE" && 
+
+      export TF_ENVIRONMENTS_WORKING_DIR="${BASE_DIR}/2-environments/envs" && 
+      export TF_ENVIRONMENTS_SERVICE_ACCOUNT="TF_ENVIRONMENTS_SERVICE_ACCOUNT_REPLACE" && 
+
+      export TF_NETWORKS_WORKING_DIR="${BASE_DIR}/3-networks-hub-and-spoke/envs" && 
+      export TF_NETWORKS_SERVICE_ACCOUNT="TF_NETWORKS_SERVICE_ACCOUNT_REPLACE" && 
+
+      export TF_PROJECTS_WORKING_DIR="${BASE_DIR}/4-projects" && 
+      export TF_PROJECTS_SERVICE_ACCOUNT="TF_PROJECTS_SERVICE_ACCOUNT_REPLACE" && 
+
+      export GOOGLE_APPLICATION_CREDENTIALS="${BASE_DIR}/creds/.gcp_temp_cred.json" && 
+      export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${GOOGLE_APPLICATION_CREDENTIALS}" && 
+      export GOOGLE_GHA_CREDS_PATH="${GOOGLE_APPLICATION_CREDENTIALS}" && 
+
+      export CLOUDSDK_CORE_PROJECT="${BOOTSTRAP_PROJECT_ID}" && 
+      export CLOUDSDK_PROJECT="${CLOUDSDK_CORE_PROJECT}" && 
+      export GCLOUD_PROJECT="${CLOUDSDK_CORE_PROJECT}" && 
+      export GCP_PROJECT="${CLOUDSDK_CORE_PROJECT}" && 
+      export GOOGLE_CLOUD_PROJECT="${CLOUDSDK_CORE_PROJECT}"
+
+    - &install-terraform >-
+      /bin/bash ${BASE_DIR}/scripts/install-terraform.sh ${TF_VERSION}
+
+pipelines:
+  default:
+    - step:
+        name: "Bootstrap"
+        oidc: true
+        script:
+          - *set-env-vars
+          - *install-terraform
+          - |
+            # Get credentials using Workload Identity Federation
+            /bin/bash ${BASE_DIR}/scripts/gcloud-impersonate.sh ${TF_BOOTSTRAP_SERVICE_ACCOUNT} ${WORKLOAD_IDENTITY_PROVIDER_ID} ${OIDC_TOKEN} ${BOOTSTRAP_PROJECT_ID} ${BASE_DIR}
+
+            # Terraform init, plan, validate, apply
+            /bin/bash ${BASE_DIR}/scripts/execute-terraform.sh ${BASE_DIR} ${TF_BOOTSTRAP_WORKING_DIR} ${BRANCH_NAME} ${BRANCH_NAME_APPLY} ${BOOTSTRAP_PROJECT_ID} ${POLICY_LIBRARY_FOLDER}
+
+    - step:
+        name: "Organization"
+        oidc: true
+        script:
+          - *set-env-vars
+          - *install-terraform
+          - |
+            # Get credentials using Workload Identity Federation
+            /bin/bash ${BASE_DIR}/scripts/gcloud-impersonate.sh ${TF_ORG_SERVICE_ACCOUNT} ${WORKLOAD_IDENTITY_PROVIDER_ID} ${OIDC_TOKEN} ${BOOTSTRAP_PROJECT_ID} ${BASE_DIR}
+
+            # Terraform init, plan, validate, apply
+            /bin/bash ${BASE_DIR}/scripts/execute-terraform.sh ${BASE_DIR} ${TF_ORG_WORKING_DIR} ${BRANCH_NAME} ${BRANCH_NAME_APPLY} ${BOOTSTRAP_PROJECT_ID} ${POLICY_LIBRARY_FOLDER}
+
+    - step:
+        name: "Environments"
+        oidc: true
+        script:
+          - *set-env-vars
+          - *install-terraform
+          - |
+            # Get credentials using Workload Identity Federation
+            /bin/bash ${BASE_DIR}/scripts/gcloud-impersonate.sh ${TF_ENVIRONMENTS_SERVICE_ACCOUNT} ${WORKLOAD_IDENTITY_PROVIDER_ID} ${OIDC_TOKEN} ${BOOTSTRAP_PROJECT_ID} ${BASE_DIR}
+
+            # Terraform init, plan, validate, apply
+            /bin/bash ${BASE_DIR}/scripts/execute-terraform.sh ${BASE_DIR} ${TF_ENVIRONMENTS_WORKING_DIR} ${BRANCH_NAME} ${BRANCH_NAME_APPLY} ${BOOTSTRAP_PROJECT_ID} ${POLICY_LIBRARY_FOLDER}
+
+    - step:
+        name: "Networking"
+        oidc: true
+        script:
+          - *set-env-vars
+          - *install-terraform
+          - |
+            # Get credentials using Workload Identity Federation
+            /bin/bash ${BASE_DIR}/scripts/gcloud-impersonate.sh ${TF_NETWORKS_SERVICE_ACCOUNT} ${WORKLOAD_IDENTITY_PROVIDER_ID} ${OIDC_TOKEN} ${BOOTSTRAP_PROJECT_ID} ${BASE_DIR}
+
+            # Terraform init, plan, validate, apply
+            /bin/bash ${BASE_DIR}/scripts/execute-terraform.sh ${BASE_DIR} ${TF_NETWORKS_WORKING_DIR} ${BRANCH_NAME} ${BRANCH_NAME_APPLY} ${BOOTSTRAP_PROJECT_ID} ${POLICY_LIBRARY_FOLDER}
